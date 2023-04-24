@@ -566,7 +566,7 @@ _SYSTEM_CONFIG = """
     first: "$ Body 13"
     second: "Ground"
   }
-  dt: 0.1875
+  dt: 0.05
   substeps: 10
   dynamics_mode: "pbd"
   """
@@ -867,7 +867,7 @@ collide_include {
   first: "$ Body 13"
   second: "Ground"
 }
-dt: 0.1875
+dt: 0.05
 substeps: 10
 dynamics_mode: "legacy_spring"
 """
