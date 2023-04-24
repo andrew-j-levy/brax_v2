@@ -169,7 +169,7 @@ class Ant(env.Env):
   * v0: Initial versions release (1.0.0)
   """
 
-
+  """
   def __init__(self,
                ctrl_cost_weight=0.5,
                use_contact_forces=False,
@@ -194,9 +194,28 @@ class Ant(env.Env):
     self._exclude_current_positions_from_observation = (
         exclude_current_positions_from_observation
     )
+  """
+  def __init__(self,
+               input_config=None,
+               legacy_spring=False,
+               **kwargs):
 
+    # """
+    if input_config is None:
+        config_str = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+        super().__init__(config_str=config_str,**kwargs)
+    else:
+        config_brax = input_config
+        super().__init__(config_brax=config_brax,**kwargs)
+    # """
+    """
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config,**kwargs)
+    """
+
+  """
   def reset(self, rng: jp.ndarray) -> env.State:
-    """Resets the environment to an initial state."""
+    # Resets the environment to an initial state.
     rng, rng1, rng2 = jp.random_split(rng, 3)
 
     qpos = self.sys.default_angle() + self._noise(rng1)
@@ -218,9 +237,22 @@ class Ant(env.Env):
         'forward_reward': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
+  """
 
+  def reset(self, torso_pos: jp.ndarray) -> env.State:
+
+    qpos = self.sys.default_angle()
+    qvel = jp.zeros(qpos.shape)
+
+    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel, torso_pos=torso_pos)
+    obs = self._get_obs(qp)
+
+    return env.State(qp, obs)
+
+
+  """
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
-    """Run one timestep of the environment's dynamics."""
+    # Run one timestep of the environment's dynamics.
     qp, info = self.sys.step(state.qp, action)
 
     velocity = (qp.pos[0] - state.qp.pos[0]) / self.sys.config.dt
@@ -253,9 +285,18 @@ class Ant(env.Env):
     )
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
+  """
 
+  def step(self, state: env.State, action: jp.ndarray) -> env.State:
+    """Run one timestep of the environment's dynamics."""
+    qp, _ = self.sys.step(state.qp, action)
+    obs = self._get_obs(qp)
+
+    return state.replace(qp=qp, obs=obs)
+
+  """
   def _get_obs(self, qp: brax.QP, info: brax.Info) -> jp.ndarray:
-    """Observe ant body position and velocities."""
+    # Observe ant body position and velocities.
     joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
 
     # qpos: position and orientation of the torso and the joint angles.
@@ -280,6 +321,19 @@ class Ant(env.Env):
       cfrc = []
 
     return jp.concatenate(qpos + qvel + cfrc)
+  """
+
+  def _get_obs(self, qp: brax.QP) -> jp.ndarray:
+    """Observe ant body position and velocities."""
+    joint_angle, joint_vel = self.sys.joints[0].angle_vel(qp)
+
+    # qpos: position and orientation of the torso and the joint angles.
+    qpos = [qp.pos[0], qp.rot[0], joint_angle]
+
+    # qvel: velocity of the torso and the joint angle velocities.
+    qvel = [qp.vel[0], qp.ang[0], joint_vel]
+
+    return jp.concatenate(qpos + qvel)
 
   def _noise(self, rng):
     low, hi = -self._reset_noise_scale, self._reset_noise_scale
