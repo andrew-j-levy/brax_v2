@@ -621,7 +621,7 @@ _SYSTEM_CONFIG = """
     second: "Ground"
   }
   dt: 0.1875
-  substeps: 10
+  substeps: 25
   dynamics_mode: "pbd"
   """
 
@@ -922,6 +922,6 @@ collide_include {
   second: "Ground"
 }
 dt: 0.1875
-substeps: 10
+substeps: 25
 dynamics_mode: "legacy_spring"
 """
