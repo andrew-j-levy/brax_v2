@@ -198,32 +198,30 @@ class Humanoid(env.Env):
 
 
   def __init__(self,
-               input_config=None,
+               forward_reward_weight=1.25,
+               ctrl_cost_weight=0.1,
+               healthy_reward=5.0,
+               terminate_when_unhealthy=True,
+               healthy_z_range=(0.8, 2.1),
+               reset_noise_scale=1e-2,
+               exclude_current_positions_from_observation=True,
                legacy_spring=False,
                **kwargs):
+    config = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
+    super().__init__(config=config, **kwargs)
 
-    # """
-    if input_config is None:
-        config_str = _SYSTEM_CONFIG_SPRING if legacy_spring else _SYSTEM_CONFIG
-        super().__init__(config_str=config_str,**kwargs)
-    else:
-        config_brax = input_config
-        super().__init__(config_brax=config_brax,**kwargs)
+    self._forward_reward_weight = forward_reward_weight
+    self._ctrl_cost_weight = ctrl_cost_weight
+    self._healthy_reward = healthy_reward
+    self._terminate_when_unhealthy = terminate_when_unhealthy
+    self._healthy_z_range = healthy_z_range
+    self._reset_noise_scale = reset_noise_scale
+    self._exclude_current_positions_from_observation = (
+        exclude_current_positions_from_observation
+    )
 
-
-  def reset(self, torso_pos: jp.ndarray) -> env.State:
-
-    qpos = self.sys.default_angle()
-    qvel = jp.zeros(qpos.shape)
-
-    qp = self.sys.default_qp(joint_angle=qpos, joint_velocity=qvel, torso_pos=torso_pos)
-    obs = self._get_obs(qp)
-
-    return env.State(qp, obs)
-
-  """
   def reset(self, rng: jp.ndarray) -> env.State:
-    # Resets the environment to an initial state.
+    """Resets the environment to an initial state."""
     rng, rng1, rng2 = jp.random_split(rng, 3)
 
     qpos = self.sys.default_angle() + self._noise(rng1)
@@ -244,18 +242,9 @@ class Humanoid(env.Env):
         'y_velocity': zero,
     }
     return env.State(qp, obs, reward, done, metrics)
-  """
 
   def step(self, state: env.State, action: jp.ndarray) -> env.State:
-    # Run one timestep of the environment's dynamics.
-    qp, info = self.sys.step(state.qp, action)
-    obs = self._get_obs(qp)
-
-    return state.replace(qp=qp, obs=obs)
-
-  """
-  def step(self, state: env.State, action: jp.ndarray) -> env.State:
-    # Run one timestep of the environment's dynamics.
+    """Run one timestep of the environment's dynamics."""
     qp, info = self.sys.step(state.qp, action)
 
     com_before = self._center_of_mass(state.qp)
@@ -289,65 +278,10 @@ class Humanoid(env.Env):
     )
 
     return state.replace(qp=qp, obs=obs, reward=reward, done=done)
-  """
 
-  def _get_obs(self, qp: brax.QP) -> jp.ndarray:
-    """Observe humanoid body position, velocities, and angles."""
-    angle_vels = [j.angle_vel(qp) for j in self.sys.joints]
-
-    # qpos: position and orientation of the torso and the joint angles.
-    joint_angles = [angle for angle, _ in angle_vels]
-    qpos = [qp.pos[0], qp.rot[0]] + joint_angles
-
-    # qvel: velocity of the torso and the joint angle velocities.
-    joint_velocities = [vel for _, vel in angle_vels]
-    qvel = [qp.vel[0], qp.ang[0]] + joint_velocities
-
-    # center of mass obs:
-    com = self._center_of_mass(qp)
-    mass_sum = jp.sum(self.sys.body.mass[:-1])
-
-    def com_vals(body, qp):
-      d = qp.pos - com
-      com_inr = body.mass * jp.eye(3) * jp.norm(d) ** 2
-      com_inr += jp.diag(body.inertia) - jp.outer(d, d)
-      com_vel = body.mass * qp.vel / mass_sum
-      com_ang = jp.cross(d, qp.vel) / (1e-7 + jp.norm(d) ** 2)
-
-      return com_inr, com_vel, com_ang
-
-    com_inr, com_vel, com_ang = jp.vmap(com_vals)(self.sys.body, qp)
-    cinert = [com_inr[:-1].ravel()]
-    cvel = [com_vel[:-1].ravel(), com_ang[:-1].ravel()]
-
-    """
-    # actuator forces
-    qfrc_actuator = []
-    for act in self.sys.actuators:
-      torque = jp.take(action, act.act_index)
-      torque = torque.reshape(torque.shape[:-2] + (-1,))
-      torque *= jp.repeat(act.strength, act.act_index.shape[-1])
-      qfrc_actuator.append(torque)
-    """
-
-    # external contact forces:
-    # delta velocity (3,), delta ang (3,) * 10 bodies in the system
-    # can be calculated in brax like so:
-    # cfrc = [
-    #     jp.clip(info.contact.vel, -1, 1),
-    #     jp.clip(info.contact.ang, -1, 1)
-    # ]
-    # flatten bottom dimension
-    # cfrc = [jp.reshape(x, x.shape[:-2] + (-1,)) for x in cfrc]
-    # then add it to the jp.concatenate below
-
-    return jp.concatenate(qpos + qvel + cinert + cvel)
-    # return jp.concatenate(qpos + qvel + cinert + cvel + qfrc_actuator)
-
-  """
   def _get_obs(self, qp: brax.QP, info: brax.Info,
                action: jp.ndarray) -> jp.ndarray:
-    # Observe humanoid body position, velocities, and angles.
+    """Observe humanoid body position, velocities, and angles."""
     angle_vels = [j.angle_vel(qp) for j in self.sys.joints]
 
     # qpos: position and orientation of the torso and the joint angles.
@@ -398,7 +332,6 @@ class Humanoid(env.Env):
     # then add it to the jp.concatenate below
 
     return jp.concatenate(qpos + qvel + cinert + cvel + qfrc_actuator)
-  """
 
   def _center_of_mass(self, qp):
     mass, pos = self.sys.body.mass[:-1], qp.pos[:-1]
