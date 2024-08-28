@@ -620,8 +620,8 @@ _SYSTEM_CONFIG = """
     first: "$ Body 13"
     second: "Ground"
   }
-  dt: 0.3
-  substeps: 30
+  dt: 0.4
+  substeps: 35
   dynamics_mode: "pbd"
   """
 
